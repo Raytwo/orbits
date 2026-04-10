@@ -232,6 +232,36 @@ impl<L: FileLoader> Tree<L> where <L as FileLoader>::ErrorType: Debug {
         self.insert_path_unchecked(root_path.as_ref(), local_path.as_ref(), FileEntryType::File)
     }
 
+    /// Inserts a file with a known size into the file tree.
+    pub fn insert_file_with_size<P: AsRef<Path>, Q: AsRef<Path>>(&mut self, root_path: P, local_path: Q, size: usize) -> Option<(PathBuf, PathBuf)> {
+        let root_path = root_path.as_ref();
+        let local_path = local_path.as_ref();
+
+        let parent_node = if let Some(parent_path) = local_path.parent() {
+            if parent_path == Path::new("/") || parent_path == Path::new("") {
+                &mut self.root
+            } else if let Some(parent) = self.get_path_mut(parent_path) {
+                parent
+            } else {
+                assert!(self.insert_path_unchecked(&Path::new(""), parent_path, FileEntryType::Directory).is_none());
+                match self.get_path_mut(parent_path) {
+                    Some(node) => node,
+                    None => panic!("Failed to find parent node '{}' immediately after adding it", parent_path.display())
+                }
+            }
+        } else {
+            &mut self.root
+        };
+
+        let node = Node::new_with_size(root_path, local_path, size).unwrap();
+
+        if let Some(RawTreeNode{ raw: Node { local_path: local, root_path: root, .. }, .. }) = parent_node.add_child(RawTreeNode::new(node, FileEntryType::File), true) {
+            Some((root, local))
+        } else {
+            None
+        }
+    }
+
     /// Inserts a directory into the file tree.
     /// This operation is unchecked, and the loader does not confirm that this file exists when adding it to the file tree.
     pub fn insert_directory<P: AsRef<Path>, Q: AsRef<Path>>(&mut self, root_path: P, local_path: Q) -> Option<(PathBuf, PathBuf)> {
@@ -367,7 +397,9 @@ impl<L: FileLoader> Tree<L> where <L as FileLoader>::ErrorType: Debug {
     /// Get the filesize for a specified local path
     pub fn query_filesize<P: AsRef<Path>>(&self, path: P) -> Option<usize> {
         if let Some(node) = self.get_path(path.as_ref()) {
-            self.loader.get_file_size(&node.data.raw.root_path, &node.data.raw.local_path)
+            node.data.raw.cached_size.or_else(|| {
+                self.loader.get_file_size(&node.data.raw.root_path, &node.data.raw.local_path)
+            })
         } else {
             None
         }

@@ -7,7 +7,8 @@ use super::{TreeError, TreeNode};
 pub struct Node {
     pub(crate) name: String,
     pub(crate) local_path: PathBuf,
-    pub(crate) root_path: PathBuf
+    pub(crate) root_path: PathBuf,
+    pub(crate) cached_size: Option<usize>
 }
 
 impl TreeNode for Node {
@@ -39,7 +40,8 @@ impl Node {
         Self {
             name: String::new(),
             root_path: PathBuf::new(),
-            local_path: PathBuf::new()
+            local_path: PathBuf::new(),
+            cached_size: None
         }
     }
 
@@ -54,8 +56,28 @@ impl Node {
         Ok(Self {
             name,
             local_path,
-            root_path
+            root_path,
+            cached_size: None
         })
+    }
+
+    /// Returns a `Node` with a known file size
+    pub fn new_with_size<A: AsRef<Path>, B: AsRef<Path>>(root_path: A, local_path: B, size: usize) -> Result<Self, TreeError> {
+        let local_path = local_path.as_ref().to_path_buf();
+        let root_path = root_path.as_ref().to_path_buf();
+
+        let name = Self::get_file_name(&local_path)?;
+        Ok(Self {
+            name,
+            local_path,
+            root_path,
+            cached_size: Some(size)
+        })
+    }
+
+    /// Returns the file size, if available
+    pub fn get_size(&self) -> Option<usize> {
+        self.cached_size
     }
 
     /// Changes the root this `Node` is based in. Changing the root has no impact over its location in the file tree.

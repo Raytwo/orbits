@@ -108,6 +108,7 @@ impl<A: FileLoader> LaunchPad<A> where <A as FileLoader>::ErrorType: Debug {
                         self.tree.insert_directory(root, local_path);
                     }
                 } else if entry.file_type().is_file() {
+                    let file_size = entry.metadata().map(|m| m.len() as usize).ok();
                     if self.tree.contains_path(local_path) {
                         if let Some(conflict) = self.handle_conflict(root, local_path) {
                             match conflict {
@@ -118,6 +119,14 @@ impl<A: FileLoader> LaunchPad<A> where <A as FileLoader>::ErrorType: Debug {
                                     conflicts.push(conflict);
                                 }
                             }
+                        } else if let Some(size) = file_size {
+                            if let Some((error_root, local)) = self.tree.insert_file_with_size(root, local_path, size) {
+                                conflicts.push(ConflictKind::StandardConflict {
+                                    error_root,
+                                    source_root: root.to_path_buf(),
+                                    local
+                                });
+                            }
                         } else if let Some((error_root, local)) = self.tree.insert_file(root, local_path) {
                             conflicts.push(ConflictKind::StandardConflict {
                                 error_root,
@@ -126,8 +135,14 @@ impl<A: FileLoader> LaunchPad<A> where <A as FileLoader>::ErrorType: Debug {
                             });
                         }
                     } else {
-                        if self.tree.insert_file(root, local_path).is_some() {
-                            panic!("Entry found without finding it first!");
+                        if let Some(size) = file_size {
+                            if self.tree.insert_file_with_size(root, local_path, size).is_some() {
+                                panic!("Entry found without finding it first!");
+                            }
+                        } else {
+                            if self.tree.insert_file(root, local_path).is_some() {
+                                panic!("Entry found without finding it first!");
+                            }
                         }
                     }
                 }
