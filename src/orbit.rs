@@ -13,7 +13,8 @@ pub struct LaunchPad<A: FileLoader> {
     handler: ConflictHandler,
     ignore: Box<dyn Fn(&Path) -> bool + Send>,
     collect: Box<dyn Fn(&Path) -> bool + Send>,
-    collected: Vec<(PathBuf, PathBuf)>
+    collected: Vec<(PathBuf, PathBuf)>,
+    collected_sizes: Vec<usize>
 }
 
 pub enum ConflictKind {
@@ -71,7 +72,8 @@ impl<A: FileLoader> LaunchPad<A> where <A as FileLoader>::ErrorType: Debug {
             handler,
             ignore: Box::new(default_conditional),
             collect: Box::new(default_conditional),
-            collected: Vec::new()
+            collected: Vec::new(),
+            collected_sizes: Vec::new()
         }
     }
 
@@ -81,7 +83,8 @@ impl<A: FileLoader> LaunchPad<A> where <A as FileLoader>::ErrorType: Debug {
             handler,
             ignore: Box::new(default_conditional),
             collect: Box::new(default_conditional),
-            collected: Vec::new()
+            collected: Vec::new(),
+            collected_sizes: Vec::new()
         }
     }
 
@@ -96,7 +99,9 @@ impl<A: FileLoader> LaunchPad<A> where <A as FileLoader>::ErrorType: Debug {
                 let local_path = path.strip_prefix(root).expect("Path found in root is not physically in root! Possible symlink?");
                 let local_pathbuf = local_path.to_path_buf();
                 if (*self.collect)(&local_pathbuf) {
+                    let size = entry.metadata().map(|m| m.len() as usize).unwrap_or(0);
                     self.collected.push((root.to_path_buf(), local_pathbuf));
+                    self.collected_sizes.push(size);
                     continue;
                 }
                 if (*self.ignore)(&local_pathbuf) {
@@ -183,6 +188,10 @@ impl<A: FileLoader> LaunchPad<A> where <A as FileLoader>::ErrorType: Debug {
 
     pub fn collected_paths<'a>(&'a self) -> &'a Vec<(PathBuf, PathBuf)> {
         &self.collected
+    }
+
+    pub fn collected_sizes<'a>(&'a self) -> &'a Vec<usize> {
+        &self.collected_sizes
     }
 
     pub fn tree<'a>(&'a self) -> &'a Tree<A> {
